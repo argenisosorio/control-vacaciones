@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Diagrama de Gantt - Control de Vacaciones (Dinámico)</title>
+    <title>Diagrama de Gantt - Control de Vacaciones</title>
     <style>
         :root {
             --primary-color: #2c3e50;
@@ -11,9 +11,9 @@
             --bg-light: #f8f9fa;
             --border-color: #e2e8f0;
             --text-main: #334155;
-            --row-height: 65px; 
+            --row-height: 80px; /* Incrementado ligeramente para dar espacio al nuevo dato */
             --sidebar-width: 320px;
-            --day-width: 4px; /* Cambiado a constante coincidiendo con el script */
+            --day-width: 4px; 
         }
 
         * {
@@ -39,7 +39,7 @@
         }
 
         header {
-            background-color: var(--primary-color);
+            background-color: rgb(54, 54, 54);
             color: white;
             padding: 20px;
             text-align: center;
@@ -55,7 +55,7 @@
             opacity: 0.8;
         }
 
-        /* Contenedor de Controles (Carga de CSV y Filtro) */
+        /* Contenedor de Controles (Carga de CSV y Filtros) */
         .controls-container {
             background-color: #fff;
             padding: 15px 20px;
@@ -87,7 +87,7 @@
             color: var(--text-main);
             outline: none;
             cursor: pointer;
-            min-width: 250px;
+            min-width: 220px;
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
 
@@ -152,13 +152,13 @@
 
         .sidebar-header {
             height: 75px; 
-            background: var(--bg-light);
+            background: #145885;
             border-bottom: 2px solid var(--border-color);
             display: flex;
             align-items: center;
             padding: 0 15px;
             font-weight: bold;
-            color: var(--primary-color);
+            color: #FFFFFF;
             border: ridge 1px gray;
         }
 
@@ -181,16 +181,35 @@
             font-size: 13px;
         }
 
-        .sidebar-row .emp-id {
+        .sidebar-row .emp-id-dept {
             font-size: 11px;
             color: #64748b;
             margin-top: 1px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .sidebar-row .emp-dept-badge {
+            background-color: #e2e8f0;
+            color: #475569;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
         }
 
         .sidebar-row .emp-dates {
             font-size: 10px;
-            color: #0284c7;
+            color: #64748b;
             font-weight: 500;
+            margin-top: 2px;
+        }
+
+        .sidebar-row .emp-duration {
+            font-size: 11px;
+            color: #0284c7;
+            font-weight: 600;
             margin-top: 2px;
         }
 
@@ -234,8 +253,9 @@
             align-items: center;
             justify-content: center;
             border-right: 1px solid var(--border-color);
-            background: var(--bg-light);
+            background: #145885;
             border: ridge 1px gray;
+            color: #FFFFFF;
         }
 
         .months-row .time-block {
@@ -336,17 +356,26 @@
 <div class="container">
     <header>
         <h1>Cronograma de Vacaciones del Personal</h1>
-        <p>Línea de tiempo interactiva dinámica desde archivo CSV</p>
+        <p>Línea de tiempo dinámica desde archivo CSV</p>
     </header>
 
     <div class="controls-container">
         <div class="control-group">
             <label>Cargar Archivo:</label>
             <div class="input-file-wrapper">
-                <label for="csv-file" class="input-file-custom">Seleccionar CSV</label>
+                <label for="csv-file" class="input-file-custom" style="color: #FFFFFF;">
+                    Seleccionar CSV
+                </label>
                 <input type="file" id="csv-file" accept=".csv">
                 <span id="file-name" class="file-name-display">Ningún archivo seleccionado</span>
             </div>
+        </div>
+
+        <div class="control-group">
+            <label for="dept-filter">Filtrar por Dirección:</label>
+            <select id="dept-filter" disabled>
+                <option value="all">-- Cargue un archivo primero --</option>
+            </select>
         </div>
 
         <div class="control-group">
@@ -363,7 +392,9 @@
 
     <div class="gantt-wrapper" id="gantt-container" style="display: none;">
         <div class="gantt-sidebar" id="gantt-sidebar">
-            <div class="sidebar-header">Trabajador / Detalles</div>
+            <div class="sidebar-header">
+                Trabajador / Detalles
+            </div>
             <div id="sidebar-rows-container"></div>
         </div>
 
@@ -385,13 +416,12 @@
     const DAY_PX = 4; 
     const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
     
-    // Variables globales para almacenar la estructuración procesada
     let tasks = [];
     let minDate, maxDate;
 
-    // Elementos del DOM reutilizables
     const csvFileInput = document.getElementById('csv-file');
     const fileNameDisplay = document.getElementById('file-name');
+    const deptFilter = document.getElementById('dept-filter');
     const workerFilter = document.getElementById('worker-filter');
     const emptyState = document.getElementById('empty-state');
     const ganttContainer = document.getElementById('gantt-container');
@@ -402,7 +432,6 @@
     const sidebarContainer = document.getElementById('sidebar-rows-container');
     const ganttRowsContainer = document.getElementById('gantt-rows-container');
 
-    // Función auxiliar para parsear fechas DD/MM/AAAA
     function parseDate(dateStr) {
         if (!dateStr) return null;
         const [day, month, year] = dateStr.trim().split('/').map(Number);
@@ -410,7 +439,6 @@
         return new Date(year, month - 1, day);
     }
 
-    // Evento al seleccionar/cambiar archivo CSV
     csvFileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -425,39 +453,36 @@
         reader.readAsText(file, 'UTF-8');
     });
 
-    // Procesamiento del texto del CSV
     function processCSVData(csvText) {
-        // Dividir líneas eliminando retornos de carro \r
         const lines = csvText.split('\n').map(line => line.replace('\r', '').trim()).filter(line => line.length > 0);
         if(lines.length <= 1) {
             alert("El archivo CSV está vacío o solo contiene la cabecera.");
             return;
         }
 
-        // Leer cabeceras para mapear dinámicamente índices en minúsculas/limpios
         const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
         const idxEmp = headers.indexOf('empleado');
         const idxCed = headers.indexOf('cédula') !== -1 ? headers.indexOf('cédula') : headers.indexOf('cedula');
+        const idxDir = headers.indexOf('dirección') !== -1 ? headers.indexOf('dirección') : headers.indexOf('direccion');
         const idxIni = headers.indexOf('fecha inicio');
         const idxFin = headers.indexOf('fecha fin');
 
         if(idxEmp === -1 || idxCed === -1 || idxIni === -1 || idxFin === -1) {
-            alert("Formato CSV no válido. Asegúrese de que las cabeceras sean exactamente:\nEmpleado, Cédula, Fecha inicio, Fecha fin");
+            alert("Formato CSV no válido. Asegúrese de que las cabeceras contengan al menos:\nEmpleado, Cédula, Dirección, Fecha inicio, Fecha fin");
             return;
         }
 
-        // Reiniciar variables de fechas globales temporales
         minDate = new Date(2500, 0, 1);
         maxDate = new Date(1900, 0, 1);
         tasks = [];
 
-        // Parsear filas de datos
         for (let i = 1; i < lines.length; i++) {
             const columns = lines[i].split(',');
-            if(columns.length < 4) continue; // Salta líneas incompletas
+            if(columns.length < 4) continue; 
 
             const name = columns[idxEmp]?.trim();
             const id = columns[idxCed]?.trim();
+            const dept = idxDir !== -1 ? columns[idxDir]?.trim() : 'General';
             const startStr = columns[idxIni]?.trim();
             const endStr = columns[idxFin]?.trim();
 
@@ -471,6 +496,7 @@
                 tasks.push({
                     name: name,
                     id: id,
+                    department: dept,
                     start: startStr,
                     end: endStr,
                     startDate: startDate,
@@ -484,25 +510,19 @@
             return;
         }
 
-        // Llevar rango al primer día del mes mínimo y al mes consecutivo del máximo para visualización completa
         minDate = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
         maxDate = new Date(maxDate.getFullYear(), maxDate.getMonth() + 1, 1);
 
-        // Cambiar vista de estados del contenedor
         emptyState.style.display = 'none';
         ganttContainer.style.display = 'flex';
 
-        // Construir Calendario y Rellenar Controles
         buildTimelineHeaders();
-        populateWorkerFilter();
+        populateFilters();
         
-        // Renderizado Inicial de renglones
-        renderGanttRows('all');
+        renderGanttRows();
     }
 
-    // Construcción dinámica de la barra de tiempo (Años, meses y cuadrículas)
     function buildTimelineHeaders() {
-        // Limpiar cabeceras previas
         yearsRow.innerHTML = '';
         monthsRow.innerHTML = '';
         ganttGrid.innerHTML = '';
@@ -535,7 +555,6 @@
             }
         });
 
-        // Pintar años
         yearsStructure.forEach(y => {
             const el = document.createElement('div');
             el.className = 'time-block';
@@ -544,7 +563,6 @@
             yearsRow.appendChild(el);
         });
 
-        // Pintar meses y columnas de fondo de cuadrícula
         monthsStructure.forEach(m => {
             const el = document.createElement('div');
             el.className = 'time-block';
@@ -559,15 +577,33 @@
         });
     }
 
-    // Rellenar el filtro dropdown sin duplicar trabajadores
-    function populateWorkerFilter() {
+    function populateFilters() {
+        deptFilter.innerHTML = '<option value="all">-- Todas las Direcciones --</option>';
+        deptFilter.disabled = false;
+        
+        const uniqueDepts = [...new Set(tasks.map(t => t.department))].sort();
+        uniqueDepts.forEach(dept => {
+            const option = document.createElement('option');
+            option.value = dept;
+            option.textContent = dept;
+            deptFilter.appendChild(option);
+        });
+
+        updateWorkerFilterOptions('all');
+    }
+
+    function updateWorkerFilterOptions(selectedDept) {
         workerFilter.innerHTML = '<option value="all">-- Todos los trabajadores --</option>';
         workerFilter.disabled = false;
+
+        const filteredForList = selectedDept === 'all' 
+            ? tasks 
+            : tasks.filter(t => t.department === selectedDept);
 
         const uniqueWorkers = [];
         const seenIds = new Set();
         
-        tasks.forEach(task => {
+        filteredForList.forEach(task => {
             if (!seenIds.has(task.id)) {
                 seenIds.add(task.id);
                 uniqueWorkers.push({ name: task.name, id: task.id });
@@ -584,23 +620,39 @@
         });
     }
 
-    // Dibujar renglones laterales y barras de Gantt basándose en filtro
-    function renderGanttRows(filterId = 'all') {
+    function renderGanttRows() {
         sidebarContainer.innerHTML = '';
         ganttRowsContainer.innerHTML = '';
 
-        const filteredTasks = filterId === 'all' 
-            ? tasks 
-            : tasks.filter(task => task.id === filterId);
+        const selectedDept = deptFilter.value;
+        const selectedWorker = workerFilter.value;
+
+        let filteredTasks = tasks;
+
+        if (selectedDept !== 'all') {
+            filteredTasks = filteredTasks.filter(t => t.department === selectedDept);
+        }
+        if (selectedWorker !== 'all') {
+            filteredTasks = filteredTasks.filter(t => t.id === selectedWorker);
+        }
 
         filteredTasks.forEach(task => {
-            // 1. Sidebar Row
+            const msPerDay = 24 * 60 * 60 * 1000;
+            const offsetDays = (task.startDate - minDate) / msPerDay;
+            const durationDays = ((task.endDate - task.startDate) / msPerDay) + 1; 
+            const totalDays = Math.round(durationDays);
+
+            // 1. Sidebar Row (Se agregaron los días consecutivos aquí abajo)
             const sideRow = document.createElement('div');
             sideRow.className = 'sidebar-row';
             sideRow.innerHTML = `
                 <div class="emp-name" title="${task.name}">${task.name}</div>
-                <div class="emp-id">C.I: ${task.id}</div>
+                <div class="emp-id-dept">
+                    <span>C.I: ${task.id}</span>
+                    <span class="emp-dept-badge">${task.department}</span>
+                </div>
                 <div class="emp-dates">Período: ${task.start} al ${task.end}</div>
+                <div class="emp-duration">Días: ${totalDays} días continuos</div>
             `;
             sidebarContainer.appendChild(sideRow);
 
@@ -608,10 +660,6 @@
             const bodyRow = document.createElement('div');
             bodyRow.className = 'gantt-row';
             
-            const msPerDay = 24 * 60 * 60 * 1000;
-            const offsetDays = (task.startDate - minDate) / msPerDay;
-            const durationDays = ((task.endDate - task.startDate) / msPerDay) + 1; 
-
             const leftPos = offsetDays * DAY_PX;
             const barWidth = durationDays * DAY_PX;
 
@@ -621,17 +669,20 @@
             bar.style.width = `${barWidth}px`;
             bar.textContent = `${task.start} al ${task.end}`;
             
-            const totalDays = Math.round(durationDays);
-            bar.setAttribute('data-tooltip', `${task.name} | Total: ${totalDays} días continuos`);
+            bar.setAttribute('data-tooltip', `${task.name} [${task.department}] | Total: ${totalDays} días continuos`);
 
             bodyRow.appendChild(bar);
             ganttRowsContainer.appendChild(bodyRow);
         });
     }
 
-    // Escuchador del selector de filtrado
-    workerFilter.addEventListener('change', function(e) {
-        renderGanttRows(e.target.value);
+    deptFilter.addEventListener('change', function(e) {
+        updateWorkerFilterOptions(e.target.value);
+        renderGanttRows();
+    });
+
+    workerFilter.addEventListener('change', function() {
+        renderGanttRows();
     });
 </script>
 
